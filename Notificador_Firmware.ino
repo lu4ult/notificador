@@ -54,7 +54,6 @@
 #define MQTT
 #define BLYNK_SI
 #define RTC_BLYNK
-// #define HORA_API
 // #define HORA_UDP
 //#define DHT_SI
 
@@ -70,9 +69,9 @@
 #include <WiFiClientSecure.h>
 // #include <UniversalTelegramBot.h>
 #include <WiFiUdp.h>
-#include <WakeOnLan.h>
-WiFiUDP UDP;
-WakeOnLan WOL(UDP);
+// #include <WakeOnLan.h>
+// WiFiUDP UDP;
+// WakeOnLan WOL(UDP);
 
 
 #include <ESP8266WiFiMulti.h>  //MultiWiFi: elige la mejor SSID
@@ -214,7 +213,7 @@ bool backlight_habilitado = 1, telegram_habilitado = 1, telegram_a_barcode = 0;
 
 // String condicion_hoy="12345678901234567890", condicion_manana="12345678901234567890", temperatura_minima="11111", temperatura_maxima="22222", condicion_actual="12345678901234567890";
 // String viento="";
-byte lluvia = 0, lluvia_ant = 1;
+// byte lluvia = 0, lluvia_ant = 1;
 
 // #define BOTtoken "1077546088:AAHoqMbfor32zYHAUH7TqvI7Gct2PH5mYFY"  // your Bot Token (Get from Botfather)
 // X509List cert(TELEGRAM_CERTIFICATE_ROOT);
@@ -259,18 +258,26 @@ float temperaturasCampo[CANT_PRONOSTICOS+1];
 byte lluviasCampo[CANT_PRONOSTICOS+1];
 */
 
-uint32_t lastPronostico = 0;
-String payloadPronostico;
-bool enviarClimaPorWhatsapp = 0;
-bool enviarClimaCampoPorWhatsapp = 0;
-bool enviarClimaPorMinutoPorWhatsapp = false;
-bool whatsappSoloParaMi = 0;
+// uint32_t lastPronostico = 0;
+// String payloadPronostico;
+// bool enviarClimaPorWhatsapp = 0;
+// bool enviarClimaCampoPorWhatsapp = 0;
+// bool enviarClimaPorMinutoPorWhatsapp = false;
+// bool whatsappSoloParaMi = 0;
 // bool iniciadoEnDebug=0;
 uint32_t momentoBotonPresionado = 0;
 
 bool pitar = false;
-String mensajeClimaMinutely = "";
+// String mensajeClimaMinutely = "";
 
+#include <Pinger.h>
+extern "C" {
+#include <lwip/icmp.h>  // needed for icmp packet definitions
+}
+
+// Set global to avoid object removing after setup() routine
+Pinger pinger;
+unsigned long ultimoMensajeServerCaido = 0;
 bool serverCrianzaOk = true, serverCrianzaOkAnt = true;
 
 
@@ -353,9 +360,10 @@ void setup() {
   dht.begin();
 #endif
 
-  // lcd.begin();
+  //lcd.begin();
   lcd.init();
   lcd.clear();
+  lcd.backlight();
   digitalWrite(pin_backlight, BACKLIGHT_APAGADO);
   // pinMode(pin_boton, INPUT_PULLUP);
   EEPROM.begin(512);
@@ -372,24 +380,15 @@ void setup() {
       esp_now_set_self_role(2);
       }
   */
-  WOL.setRepeat(3, 100);
-  WOL.calculateBroadcastAddress(WiFi.localIP(), WiFi.subnetMask());
+  // WOL.setRepeat(3, 100);
+  // WOL.calculateBroadcastAddress(WiFi.localIP(), WiFi.subnetMask());
 
 #ifdef MQTT
   clienteMqtt.setServer(mqtt_server, 1883);
   clienteMqtt.setCallback(callback);
 #endif
 
-  // timeClient.begin();
 
-
-#ifdef HORA_API
-  getTimeFromApi();
-#endif
-  // pronostico();
-  // clima();
-  // actualizarSol();
-  // pronosticoCampo();
 
 #ifdef RTC_BLYNK
   setSyncInterval(20);  // Intervalo de actualización del reloj muy rapido hasta que se sincronize
@@ -407,18 +406,24 @@ void setup() {
   previousMillis = millis();
   Serial.println(WiFi.macAddress());
 
-  mensajeClimaMinutely.reserve(980);
+  pinger.OnReceive([](const PingerResponse &response) {
+    if (response.ReceivedResponse) {
+      serverCrianzaOk = true;
+      Serial.printf(
+        "Reply from %s: bytes=%d time=%lums TTL=%d\n",
+        response.DestIPAddress.toString().c_str(),
+        response.EchoMessageSize - sizeof(struct icmp_echo_hdr),
+        response.ResponseTime,
+        response.TimeToLive);
+    } else {
+      serverCrianzaOk = false;
+      Serial.printf("Request timed out.\n");
+    }
 
-  /*
-  for(int i=-6;i<=0;i++) {
-    Serial.println(i);
-    pitidos(i,100);
-    delay(1000);
-  }
-
- 
-
-  espera(2000);*/
+    // Return true to continue the ping sequence.
+    // If current event returns false, the ping sequence is interrupted.
+    return true;
+  });
 
 
   Serial.println("Iniciado");
@@ -479,30 +484,6 @@ void loop() {
     }
   }
 
-  if (enviarClimaPorMinutoPorWhatsapp) {
-    // Serial.println("enviar wa");
-    enviarClimaPorMinutoPorWhatsapp = false;
-    mensajeClimaMinutely = climaMinutely();
-
-    // Serial.println(rtta);
-    if (mensajeClimaMinutely.indexOf("error") == -1 and mensajeClimaMinutely.indexOf("nada") == -1) {
-      // lastEnvioLluviasPorMinutoExitoso = millis();
-      Serial.println("Enviando whatsapp:");
-
-      if (dia == 6 and mes == 3 and ano >= 2022 and millis() > 5 * 60 * 1000) {
-        enviarWhatsapp(mensajeClimaMinutely, 1);
-        espera(500);
-        enviarWhatsapp(mensajeClimaMinutely, 2);
-        espera(500);
-      }
-
-      if (enviarWhatsapp(mensajeClimaMinutely, 0)) {
-        Serial.println("whatsapp enviado exitosamente");
-      } else {
-        Serial.println("Whatsapp falló");
-      }
-    }
-  }
 
   if (Serial.available()) {
     delay(50);
@@ -512,28 +493,6 @@ void loop() {
       entrada += c;
     }
     Serial.println("Recibi:\n" + entrada);
-
-    /*
-    if(entrada.indexOf("clima") >= 0) {
-      pronostico();
-      }
-    */
-    if (entrada.indexOf("wa") >= 0) {
-      horaAnt = random(60, 70);
-      previousMillis = 0;
-      enviarClimaPorWhatsapp = 1;
-      Serial.println("whatsapp");
-    }
-    if (entrada.indexOf("campo") >= 0) {
-      horaAnt = random(60, 70);
-      previousMillis = 0;
-      enviarClimaCampoPorWhatsapp = 1;
-    }
-
-    if (entrada.indexOf("min") >= 0) {
-      enviarClimaPorMinutoPorWhatsapp = true;
-      pitar = true;
-    }
   }
 
   if (digitalRead(pin_boton)) {
@@ -569,7 +528,28 @@ void loop() {
   last_loop = millis();
   if (millis() - previousMillis >= PERIODO * 1000) {
     previousMillis = millis();
+
+
     periodicamente();
+  }
+
+  if (serverCrianzaOk != serverCrianzaOkAnt) {
+    serverCrianzaOkAnt = serverCrianzaOk;
+
+    if (serverCrianzaOk) {
+      Serial.println("Server OK");
+      // enviarWhatsapp("Server Crianza Ok", 0);
+      enviarDisplay("Server Crianza Ok[NS][BLC]");
+    } else {
+      Serial.println("Server Caido");
+      // enviarWhatsapp("Server Crianza Caído!", 0);
+      enviarDisplay("Server Crianza Caído!");
+
+      if (millis() - ultimoMensajeServerCaido > 60 * 60 * 1000) {
+        httpGetString("https://lu4ult-api.vercel.app/notifications/t?msg=Server Crianza Caido");
+        ultimoMensajeServerCaido = millis();
+      }
+    }
   }
 }
 
@@ -628,29 +608,15 @@ void periodicamente() {
     // Serial.println("minuto ant");
     // #endif
 
-    if (minuto % 5 == 0 && WiFi.waitForConnectResult() == WL_CONNECTED) {
-      serverCrianzaOk = verificarServerCrianza();
-      if (serverCrianzaOk != serverCrianzaOkAnt) {
-        serverCrianzaOkAnt = serverCrianzaOk;
+    // if (minuto % 2 == 0 && WiFi.waitForConnectResult() == WL_CONNECTED) {
+    //   // serverCrianzaOk = verificarServerCrianza();
 
-        Serial.println("Cambio server Crianza");
-
-        if (serverCrianzaOk) {
-          Serial.println("Server OK");
-          // enviarWhatsapp("Server Crianza Ok", 0);
-          enviarDisplay("Server Crianza Ok");
-        } else {
-          Serial.println("Server Caido");
-          // enviarWhatsapp("Server Crianza Caído!", 0);
-          enviarDisplay("Server Crianza Caído!");
-        }
-      }
-    }
-
-    // if (momentoActual == mediodia and hora > 8 and hora < 18) {
-    //   publicar_lcd("", " Excelente momento", " para lavar platos", "");
-    //   tiempoBackLight = 15 * 60;
+    //   //Reemplazar por ping a local
     // }
+
+    if (pinger.Ping(IPAddress(192, 168, 1, 50)) == false) {
+      // Serial.println("Error during ping command.");
+    }
   }
 
   if (hora != horaAnt and ano > 2020 and millis() > 5 * 60 * 1000) {
@@ -660,30 +626,6 @@ void periodicamente() {
 #ifdef DEBUG
     Serial.println("hora ant");
 #endif
-
-    // if (timestampProximoWhatsapp == 0) {
-    //   Serial.println("Sin mensajes programados");
-    // }
-
-    // else {
-    //   unsigned long currentTimestamp = now() + 10800;
-    //   unsigned long tiempoHastaProximoWhatsapp = 6 * 60 * 1000;
-
-    //   if (currentTimestamp >= timestampProximoWhatsapp && (hora >= 8 || hora == 0)) {
-    //     //timestampProximoWhatsapp = 0;
-    //     //Serial.println("aca enviar whatsapp");
-    //     enviarWhatsapp("Flush Whatsapps programados", 0);
-    //   } else {
-    //     tiempoHastaProximoWhatsapp = timestampProximoWhatsapp - currentTimestamp;
-    //     // Serial.print("Proximo whatsapp en: ");
-    //     // Serial.println(formatedTimeInMinutesAsString(tiempoHastaProximoWhatsapp));
-    //   }
-
-    //   if (tiempoHastaProximoWhatsapp < 5 * 60) {
-    //     tiempoBackLight = 120;
-    //     publicar_lcd("", "WA Programado:", formatedTimeInMinutesAsString(tiempoHastaProximoWhatsapp), "");
-    //   }
-    // }
   }
 }
 
@@ -697,12 +639,12 @@ BLYNK_WRITE(V27) {  // Mensajes Externos (IFTTT)
   enviarDisplay(param.asString());
 }
 
-BLYNK_WRITE(V50) {
-  if (param.asInt()) {
-    Blynk.virtualWrite(V50, 0);
-    WOL.sendMagicPacket("30:9C:23:67:92:95");
-  }
-}
+// BLYNK_WRITE(V50) {
+//   if (param.asInt()) {
+//     Blynk.virtualWrite(V50, 0);
+//     WOL.sendMagicPacket("30:9C:23:67:92:95");
+//   }
+// }
 
 //51: TNs
 //52: mensajes programados
