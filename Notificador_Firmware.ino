@@ -278,8 +278,8 @@ extern "C" {
 // Set global to avoid object removing after setup() routine
 Pinger pinger;
 unsigned long ultimoMensajeServerCaido = 0;
-bool serverCrianzaOk = true, serverCrianzaOkAnt = true;
-
+// bool serverCrianzaOk = true, serverCrianzaOkAnt = true;
+int contadorDeFallasServerCrianza = 0, contadorDeFallasServerCrianzaAnt = 0;
 
 #ifdef WATCHDOG_DUCO
 void ICACHE_RAM_ATTR lwdtcb(void) {
@@ -408,15 +408,15 @@ void setup() {
 
   pinger.OnReceive([](const PingerResponse &response) {
     if (response.ReceivedResponse) {
-      serverCrianzaOk = true;
-      Serial.printf(
-        "Reply from %s: bytes=%d time=%lums TTL=%d\n",
-        response.DestIPAddress.toString().c_str(),
-        response.EchoMessageSize - sizeof(struct icmp_echo_hdr),
-        response.ResponseTime,
-        response.TimeToLive);
+      contadorDeFallasServerCrianza--;
+      // Serial.printf(
+      //   "Reply from %s: bytes=%d time=%lums TTL=%d\n",
+      //   response.DestIPAddress.toString().c_str(),
+      //   response.EchoMessageSize - sizeof(struct icmp_echo_hdr),
+      //   response.ResponseTime,
+      //   response.TimeToLive);
     } else {
-      serverCrianzaOk = false;
+      contadorDeFallasServerCrianza++;
       Serial.printf("Request timed out.\n");
     }
 
@@ -425,6 +425,8 @@ void setup() {
     return true;
   });
 
+
+  // httpGetString("https://lu4ult-api.vercel.app/notifications/t/?msg=testinggg");
 
   Serial.println("Iniciado");
   pitidos(SONIDO_EN, 100);
@@ -533,24 +535,45 @@ void loop() {
     periodicamente();
   }
 
-  if (serverCrianzaOk != serverCrianzaOkAnt) {
-    serverCrianzaOkAnt = serverCrianzaOk;
+  if (contadorDeFallasServerCrianza != contadorDeFallasServerCrianzaAnt) {
+    contadorDeFallasServerCrianzaAnt = contadorDeFallasServerCrianza;
 
-    if (serverCrianzaOk) {
-      Serial.println("Server OK");
-      // enviarWhatsapp("Server Crianza Ok", 0);
-      enviarDisplay("Server Crianza Ok[NS][BLC]");
-    } else {
+    // Serial.println("contadorDeFallasServerCrianza: " + String(contadorDeFallasServerCrianza));
+    if (contadorDeFallasServerCrianza == 4) {
       Serial.println("Server Caido");
       // enviarWhatsapp("Server Crianza Caído!", 0);
       enviarDisplay("Server Crianza Caído!");
 
       if (millis() - ultimoMensajeServerCaido > 60 * 60 * 1000) {
-        httpGetString("https://lu4ult-api.vercel.app/notifications/t?msg=Server Crianza Caido");
+        // httpGetString("https://lu4ult-api.vercel.app/notifications/t?msg=Server Crianza Caido");
+        httpGetString("https://lu4ult-api.vercel.app/notifications/t/?msg=Server Crianza caido");
         ultimoMensajeServerCaido = millis();
       }
     }
+    // } else {
+    //   Serial.println("Server OK");
+    //   // enviarWhatsapp("Server Crianza Ok", 0);
+    //   enviarDisplay("Server Crianza Ok[NS][BLC]");
+    // }
   }
+  // if (serverCrianzaOk != serverCrianzaOkAnt) {
+  //   serverCrianzaOkAnt = serverCrianzaOk;
+
+  //   if (serverCrianzaOk) {
+  //     Serial.println("Server OK");
+  //     // enviarWhatsapp("Server Crianza Ok", 0);
+  //     enviarDisplay("Server Crianza Ok[NS][BLC]");
+  //   } else {
+  //     Serial.println("Server Caido");
+  //     // enviarWhatsapp("Server Crianza Caído!", 0);
+  //     enviarDisplay("Server Crianza Caído!");
+
+  //     if (millis() - ultimoMensajeServerCaido > 60 * 60 * 1000) {
+  //       httpGetString("https://lu4ult-api.vercel.app/notifications/t?msg=Server Crianza Caido");
+  //       ultimoMensajeServerCaido = millis();
+  //     }
+  //   }
+  // }
 }
 
 void periodicamente() {
@@ -608,14 +631,11 @@ void periodicamente() {
     // Serial.println("minuto ant");
     // #endif
 
-    // if (minuto % 2 == 0 && WiFi.waitForConnectResult() == WL_CONNECTED) {
-    //   // serverCrianzaOk = verificarServerCrianza();
-
-    //   //Reemplazar por ping a local
-    // }
-
-    if (pinger.Ping(IPAddress(192, 168, 1, 50)) == false) {
-      // Serial.println("Error during ping command.");
+    if (minuto % 15 == 0 && WiFi.waitForConnectResult() == WL_CONNECTED) {
+      contadorDeFallasServerCrianza = 0;
+      if (pinger.Ping(IPAddress(192, 168, 1, 50)) == false) {
+        // Serial.println("Error during ping command.");
+      }
     }
   }
 

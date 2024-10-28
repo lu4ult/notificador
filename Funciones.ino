@@ -210,9 +210,7 @@ String httpGetString(String _URL) {
 
       _payload = http_duco.getString();
     } else {
-#ifdef SERIAL_DUCO_SI
       Serial.printf("[HTTP] GET... failed, error: %s\n", http_duco.errorToString(httpCode).c_str());
-#endif
     }
     http_duco.end();
   }
