@@ -396,8 +396,6 @@ void setup() {
   rtc.begin();
 #endif
 
-  // Serial.println(WiFi.macAddress());
-
 #ifdef WATCHDOG_DUCO
   lwdCurrentMillis = millis();
   lwdTimeOutMillis = lwdCurrentMillis + LWD_TIMEOUT;
@@ -430,25 +428,15 @@ void setup() {
 
   Serial.println("Iniciado");
   pitidos(SONIDO_EN, 100);
-
-  //TODO: AGREGAR PITIDOS COMO EN TIMBRE WHATSAPP EL DEL ERROR, COMO TAMBIÉN EN BARCODE READER
 }
 
 #ifdef BLYNK_SI
 BLYNK_CONNECTED() {
   if (isFirstConnect) {
-
-    // Serial.println("Iniciando sincro");
-    // Blynk.syncAll();
     Blynk.syncVirtual(V27);
     Blynk.syncVirtual(V53);
     isFirstConnect = false;
-    // Blynk.virtualWrite(V103, FIRM_VERSION); //debug level 4
-    // Blynk.virtualWrite(V105, String(3014)); //debug level 7
-    // Blynk.virtualWrite(V106, String("SSID: "+WiFi.SSID()+" - Pass: "+WiFi.psk()+" MAC: " + WiFi.macAddress()));
-    // Serial.println("fin sincro");
-    // pitidos(SONIDO_ENCENDIDO,0);
-  }
+    }
 }
 #endif
 
@@ -472,12 +460,9 @@ void loop() {
   clienteMqtt.loop();
 #endif
 
-
   if (pitar) {
     pitar = false;
-    // pitidos(SONIDO_BT, 0);
-    // delay(1000);
-
+  
     for (byte i = 0; i < 3; i++) {
       digitalWrite(PIN_ZUMBADOR, 1);
       delay(100);
@@ -514,7 +499,6 @@ void loop() {
     previousMillis_bl = millis();
 
     if (tiempoBackLight) {
-      //Serial.println("Tiempo backlight: "+String(tiempoBackLight));
       lcd.backlight();
       digitalWrite(pin_backlight, BACKLIGHT_ENCENDIDO);
       tiempoBackLight--;
@@ -526,7 +510,6 @@ void loop() {
   }
 
 
-  //  unsigned long currentMillis = millis();
   last_loop = millis();
   if (millis() - previousMillis >= PERIODO * 1000) {
     previousMillis = millis();
@@ -538,42 +521,17 @@ void loop() {
   if (contadorDeFallasServerCrianza != contadorDeFallasServerCrianzaAnt) {
     contadorDeFallasServerCrianzaAnt = contadorDeFallasServerCrianza;
 
-    // Serial.println("contadorDeFallasServerCrianza: " + String(contadorDeFallasServerCrianza));
-    if (contadorDeFallasServerCrianza == 4) {
+     if (contadorDeFallasServerCrianza == 4) {
       Serial.println("Server Caido");
-      // enviarWhatsapp("Server Crianza Caído!", 0);
       enviarDisplay("Server Crianza Caído!");
 
       if (millis() - ultimoMensajeServerCaido > 60 * 60 * 1000) {
-        // httpGetString("https://lu4ult-api.vercel.app/notifications/t?msg=Server Crianza Caido");
-        httpGetString("https://lu4ult-api.vercel.app/notifications/t/?msg=Server Crianza caido");
+        httpGetString("https://lu4ult-api.vercel.app/notifications/t/?msg=Server%20Crianza%20caido");
+       
         ultimoMensajeServerCaido = millis();
       }
     }
-    // } else {
-    //   Serial.println("Server OK");
-    //   // enviarWhatsapp("Server Crianza Ok", 0);
-    //   enviarDisplay("Server Crianza Ok[NS][BLC]");
-    // }
   }
-  // if (serverCrianzaOk != serverCrianzaOkAnt) {
-  //   serverCrianzaOkAnt = serverCrianzaOk;
-
-  //   if (serverCrianzaOk) {
-  //     Serial.println("Server OK");
-  //     // enviarWhatsapp("Server Crianza Ok", 0);
-  //     enviarDisplay("Server Crianza Ok[NS][BLC]");
-  //   } else {
-  //     Serial.println("Server Caido");
-  //     // enviarWhatsapp("Server Crianza Caído!", 0);
-  //     enviarDisplay("Server Crianza Caído!");
-
-  //     if (millis() - ultimoMensajeServerCaido > 60 * 60 * 1000) {
-  //       httpGetString("https://lu4ult-api.vercel.app/notifications/t?msg=Server Crianza Caido");
-  //       ultimoMensajeServerCaido = millis();
-  //     }
-  //   }
-  // }
 }
 
 void periodicamente() {
@@ -609,13 +567,6 @@ void periodicamente() {
     setSyncInterval(15 * 60);
 //terminal.println("Iniciado!");
 #endif
-    //actualizar(1);
-    //publicar_lcd("", "","", "");
-    //tiempoBackLight = 5;
-    //Blynk.syncVirtual(V27);
-
-    // Serial.println("rtc lento");
-    // publicar_lcd(condicion_actual_str,pronosticosTextos[0],pronosticosTextos[1],pronosticosTextos[2],120*lluvia);
   }
 
   // if (dia != diaAnt) {
